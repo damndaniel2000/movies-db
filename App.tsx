@@ -1,154 +1,212 @@
-import React, { useState, useEffect } from 'react';
-import { SafeAreaView, FlatList, View, Text, Image, StyleSheet, Dimensions, Pressable, SectionList } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { SafeAreaView, FlatList, View, Text, Image, StyleSheet, SectionList, Dimensions } from 'react-native';
 import Axios from 'axios';
+import { MovieSectionComponent, MovieCard, MovieSkeletonLoader } from './components/MovieSection';
+import { Genre, Movie, MovieSection } from './utils/types';
+import { MOVIES_API, GENRES_API, SEARCH_API } from './utils/constants';
+import GenreButton from './components/GenreButton';
+import Loader from './components/Loader';
+import SearchInput from './components/Searchbar';
 
-const { width } = Dimensions.get('window');
-const API = "https://api.themoviedb.org/3/discover/movie?api_key=2dca580c2a14b55200e784d157207b4d&sort_by=popularity.desc&page=1&vote_count.gte=100";
-const URL = "https://image.tmdb.org/t/p/w500/";
 const LOGO = require("./assets/fancode-fclogo.png")
-
-type Movie = {
-  title: string,
-  id: string,
-  poster_path: string,
-  vote_average: number,
-}
-
-type MovieSection = {
-  title: number,
-  data: [
-    { key: number, movies: Movie[] }
-  ],
-}
-
-type Genre = {
-  name: string,
-  id: number,
-}
-
-type SearchParams = {
-  refresh?: boolean,
-  prevYear?: true,
-  nextYear?: true,
-  search?: string,
+const DEFAULT_YEAR = 2012
+const DEFAULT_GENRE =
+{
+  name: "All",
+  id: -1,
 }
 
 
 export default function App() {
   const [movies, setMovies] = useState<MovieSection[]>([]);
-  const [genres, setGenres] = useState<Genre[]>([{
-    id: 0,
-    name: "All"
-  }])
-  const [year, setYear] = useState(2012)
-  const [selectedGenres, setSelectedGenres] = useState<number[]>([])
+  const [isMoviesLoading, setIsMoviesLoading] = useState(false)
+
+  const [genres, setGenres] = useState<Genre[]>([DEFAULT_GENRE])
+  const [selectedGenres, setSelectedGenres] = useState<number[]>([DEFAULT_GENRE.id])
+
+  const [isPrevFetching, setIsPrevFetching] = useState(false)
+  const [isNextFetching, setIsNextFetching] = useState(false)
+  const [currentPrevYear, setCurrentPrevYear] = useState(DEFAULT_YEAR)
+  const [currentNextYear, setCurrentNextYear] = useState(DEFAULT_YEAR)
+
+  //kept this different as the structure and API is different for search
+  const [searchString, setSearchString] = useState('');
+  const [searchMovies, setSearchMovies] = useState<Movie[]>([])
+  const [searchPage, setSearchPage] = useState(1);
+  const [searchHasMore, setSearchHasMore] = useState(true);
+
+  const moviesListRef = useRef(null) as any
+
+  const scrollToDefaultPosition = () => {
+    moviesListRef.current?.scrollToLocation({
+      sectionIndex: 0,
+      itemIndex: 0,
+      viewOffset: -5,
+      animated: false
+    })
+  }
+
+  const resetData = () => {
+    setCurrentNextYear(DEFAULT_YEAR)
+    setCurrentPrevYear(DEFAULT_YEAR)
+    scrollToDefaultPosition()
+  }
 
   const handleGenre = (id: number) => {
+    //is user selects All filter
+    if (id === DEFAULT_GENRE.id) {
+      //if user touches All when its already selected
+      if (selectedGenres.includes(DEFAULT_GENRE.id)) return
+      setSelectedGenres([DEFAULT_GENRE.id])
+      resetData()
+      return
+    }
+    resetData()
     if (selectedGenres.includes(id)) {
-      setSelectedGenres(prev => prev.filter(item => item !== id))
+      setSelectedGenres(prev => {
+        const arr = prev.filter(item => item !== id)
+        //if all the other genres are not selected, go back to All
+        if (arr.length === 0) return [DEFAULT_GENRE.id]
+        else return arr
+      })
     } else {
-      setSelectedGenres(prev => [...prev, id])
+      setSelectedGenres(prev => {
+        if (prev.includes(DEFAULT_GENRE.id)) return [id]
+        else return [...prev, id]
+      })
     }
   }
 
+  const fetchMovies = async (yearToFetch: number, updateState: (newMovies: MovieSection) => void) => {
+    let url = MOVIES_API;
+    url += `&primary_release_year=${yearToFetch}`;
 
-  const handleMovieFetch = (args: SearchParams) => {
-    let yearToFetch = year;
-
-    if (args.prevYear) {
-      yearToFetch -= 1;
-    } else if (args.nextYear) {
-      if (new Date().getFullYear() === yearToFetch) return;
-      yearToFetch += 1;
-    }
-
-    let url = API;
-    if (!args.search) {
-      url += `&primary_release_year=${yearToFetch}`;
-    }
-
-    if (selectedGenres.length > 0) {
+    if (selectedGenres.length > 0 && !selectedGenres.includes(DEFAULT_GENRE.id)) {
       url += `&with_genres=${selectedGenres.join('|')}`;
     }
 
-    if (args.search) {
-      url += `&query=${args.search}`;
+    try {
+      const res = await Axios.get(url);
+      const newMovies: MovieSection = {
+        title: yearToFetch,
+        data: [{ key: yearToFetch, movies: res.data.results }],
+      };
+      updateState(newMovies);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const loadMovieData = () => {
+    const yearToFetch = DEFAULT_YEAR;
+    setIsMoviesLoading(true)
+    fetchMovies(yearToFetch, (newMovies) => {
+      setMovies([newMovies]);
+      setIsMoviesLoading(false)
+      moviesListRef.current?.scrollToLocation({
+        animated: false,
+        sectionIndex: 0,
+        itemIndex: 0,
+        viewOffset: -5,
+      });
+    });
+  };
+
+  const loadMoreMovieData = (prev?: boolean, next?: boolean) => {
+    let yearToFetch = prev ? currentPrevYear : currentNextYear
+
+    if (prev) {
+      setIsPrevFetching(true);
+      yearToFetch -= 1;
+    } else if (next) {
+      if (new Date().getFullYear() === yearToFetch) return;
+      yearToFetch += 1;
+      setIsNextFetching(true);
     }
 
-    Axios.get(url)
-      .then(res => {
-        const newMovies: MovieSection = {
-          title: yearToFetch,
-          data: [{ key: yearToFetch, movies: res.data.results }]
-        };
+    fetchMovies(yearToFetch, (newMovies) => {
+      if (prev) {
+        setMovies(prev => [newMovies].concat(prev));
+        setCurrentPrevYear(yearToFetch)
+      }
+      else {
+        setMovies(prev => [...prev, newMovies]);
+        setCurrentNextYear(yearToFetch)
+      }
+      setIsNextFetching(false);
+      setIsPrevFetching(false);
+    });
+  };
 
-        if (args.refresh) {
-          setMovies([newMovies]);
-        } else {
-          setMovies(prev => [...prev, newMovies]);
+  //specifically made for search because it doesn't support a genre filter
+  const applyGenreFilter = (movies: Movie[]) => {
+    if (selectedGenres.length > 0 && !selectedGenres.includes(DEFAULT_GENRE.id)) {
+      return movies.filter((movie) =>
+        selectedGenres.some((genre) => movie.genre_ids.includes(genre))
+      );
+    }
+    return movies;
+  };
+
+  const onSearchMovies = async (text: string) => {
+    setSearchString(text);
+    //when search is cleared, go back to default view
+    //takes into account any genres selected during search
+    if (text.length === 0) {
+      loadMovieData()
+    }
+    if (text.length > 2) {
+      setIsMoviesLoading(true);
+      setSearchPage(1);
+      setSearchHasMore(true);
+      try {
+        const res = await Axios.get(`${SEARCH_API}&query=${text}&page=1`);
+        const filteredMovies = applyGenreFilter(res.data.results);
+        setSearchMovies(filteredMovies);
+        if (filteredMovies.length === 0) {
+          setSearchHasMore(false);
         }
-      })
-      .catch(err => {
-        console.error(err);
-      });
+      } catch (err) {
+        console.log(err);
+      } finally {
+        setIsMoviesLoading(false);
+      }
+    }
+  };
+
+  const onSearchMoreMovies = async () => {
+    if (!searchHasMore) return; // Stop if no more results
+    setIsNextFetching(true)
+    try {
+      const res = await Axios.get(`${SEARCH_API}&query=${searchString}&page=${searchPage + 1}`);
+      const filteredMovies = applyGenreFilter(res.data.results);
+      if (filteredMovies.length === 0) {
+        setSearchHasMore(false);
+      } else {
+        setSearchMovies(prevMovies => [...prevMovies, ...filteredMovies]);
+        setSearchPage(prevPage => prevPage + 1);
+      }
+    } catch (err) {
+      console.log(err);
+    } finally {
+      setIsNextFetching(false);
+    }
   };
 
   useEffect(() => {
-    handleMovieFetch({ refresh: true })
+    if (searchString.length < 2)
+      loadMovieData()
+    else onSearchMovies(searchString)
   }, [selectedGenres]);
 
 
   useEffect(() => {
-    Axios.get("https://api.themoviedb.org/3/genre/movie/list?api_key=2dca580c2a14b55200e784d157207b4d&language=en")
+    Axios.get(GENRES_API)
       .then(res => {
         setGenres(prev => [...prev, ...res.data.genres])
-      }).catch(err => console.log(err))
+      })
+      .catch(err => console.log(err))
   }, [])
-
-
-
-  const renderMovie = ({ item }: { item: Movie }) => (
-    <View style={styles.movie}>
-      <Image source={{ uri: URL + item.poster_path }} style={styles.image} />
-      <View style={styles.textContainer}>
-        <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
-        <Text style={styles.rating}>{item.vote_average.toFixed(1)}</Text>
-      </View>
-    </View>
-  );
-
-  const renderMovies = ({ section }: { section: MovieSection }) => {
-    return <FlatList
-      data={section.data[0].movies}
-      renderItem={renderMovie}
-      keyExtractor={(item, index) => item.id.toString() + index.toString()}
-      numColumns={2}
-      contentContainerStyle={styles.moviesContainer}
-    />
-
-  }
-
-
-  const renderSectionHeader = ({ section }: { section: MovieSection }) => (
-    <View style={styles.header}>
-      <Text style={styles.headerText}>{section.title}</Text>
-    </View>
-  );
-
-  const renderGenre = ({ item }: { item: Genre }) => (
-    <Pressable style={() => [
-      {
-        backgroundColor: selectedGenres.includes(item.id) ? "#F0283C" : "#484848",
-      },
-      styles.genreButton
-    ]}
-      onPress={(e) => handleGenre(item.id)}
-    >
-      {({ pressed }) => (
-        <Text style={styles.genreButtonText}>{item.name}</Text>
-      )}
-    </Pressable >
-  )
 
   return (
     <SafeAreaView style={styles.container}>
@@ -157,28 +215,66 @@ export default function App() {
           marginLeft: 20
         }}
           source={LOGO} />
+        <View style={{
+          marginLeft: 8
+        }}>
+          <SearchInput onChange={onSearchMovies} delay={500} placeholder="Search a movie..." />
+        </View>
         <FlatList
           contentContainerStyle={{
             columnGap: 8,
             paddingHorizontal: 20,
           }}
           data={genres}
-          renderItem={renderGenre}
+          renderItem={({ item }) =>
+            <GenreButton item={item} onPress={handleGenre} selectedItems={selectedGenres} />
+          }
           keyExtractor={item => item.id.toString()}
           horizontal
         />
       </View>
-      <SectionList
-        sections={movies}
-        renderItem={renderMovies}
-        renderSectionHeader={renderSectionHeader}
-        keyExtractor={(item, index) => item.key.toString() + index.toString()}
-        onEndReached={e => handleMovieFetch({ nextYear: true })}
-        onEndReachedThreshold={1}
-      />
+      <SafeAreaView style={{ flex: 1 }}>
+        {
+          isMoviesLoading ?
+            <MovieSkeletonLoader />
+            :
+            searchString.length < 2 ?
+              <SectionList
+                ref={moviesListRef}
+                sections={movies}
+                renderItem={MovieSectionComponent}
+                renderSectionHeader={({ section }: { section: MovieSection }) => (
+                  <View style={styles.header}>
+                    <Text style={styles.headerText}>{section.title}</Text>
+                  </View>
+                )}
+                keyExtractor={(item, index) => item.key.toString() + index.toString()}
+                onEndReached={e => loadMoreMovieData(false, true)}
+                onEndReachedThreshold={1}
+                onScroll={(e) => {
+                  if (e.nativeEvent.contentOffset.y === 0) {
+                    loadMoreMovieData(true)
+                  }
+                }}
+                ListHeaderComponent={() => <Loader isLoading={isPrevFetching && movies.length > 0} />}
+                ListFooterComponent={() => <Loader isLoading={isNextFetching && movies.length > 0} />}
+              />
+              :
+              <FlatList
+                data={searchMovies}
+                keyExtractor={(item, index) => item.id.toString() + index.toString()}
+                renderItem={MovieCard}
+                numColumns={2}
+                onEndReached={onSearchMoreMovies}
+                onEndReachedThreshold={1}
+                ListFooterComponent={() => <Loader isLoading={isNextFetching && movies.length > 0} />}
+              />
+        }
+      </SafeAreaView>
     </SafeAreaView>
   );
 }
+
 
 const styles = StyleSheet.create({
   container: {
@@ -200,48 +296,4 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "bold"
   },
-  genreButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 4,
-  },
-  genreButtonText: {
-    color: "#fff",
-    fontWeight: "bold"
-  },
-  moviesContainer: {
-    padding: 16,
-  },
-  movie: {
-    position: "relative",
-    flex: 1,
-    flexDirection: 'column',
-    margin: 8,
-    width: (width - 48) / 2,
-    height: 250,
-  },
-  image: {
-    width: '100%',
-    height: "100%",
-    position: "absolute",
-    resizeMode: 'cover',
-    borderRadius: 8,
-    opacity: .8
-  },
-  textContainer: {
-    position: "absolute",
-    bottom: 0,
-    padding: 8,
-  },
-  title: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: "#fff",
-
-  },
-  rating: {
-    fontSize: 10,
-    fontWeight: "bold",
-    color: "#fff"
-  }
 });
