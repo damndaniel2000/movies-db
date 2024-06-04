@@ -218,7 +218,7 @@ export default function App() {
         <View style={{
           marginLeft: 8
         }}>
-          <SearchInput onChange={onSearchMovies} delay={500} placeholder="Search a movie..." />
+          <SearchInput handleChange={onSearchMovies} delay={500} placeholder="Search a movie..." />
         </View>
         <FlatList
           contentContainerStyle={{

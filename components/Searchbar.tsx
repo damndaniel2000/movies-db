@@ -2,9 +2,9 @@ import React, { useState, useEffect, FC } from 'react';
 import { TextInput, StyleSheet, View, TextInputProps } from 'react-native';
 
 type SearchInputProps = {
-    onChange: (text: string) => void;
+    handleChange: (text: string) => void;
     delay?: number;
-} & Omit<TextInputProps, 'onChange'>;
+} & TextInputProps
 
 const debounce = (func: (...args: any[]) => void, delay: number) => {
     let timeoutId: ReturnType<typeof setTimeout>;
@@ -16,10 +16,10 @@ const debounce = (func: (...args: any[]) => void, delay: number) => {
     };
 };
 
-const SearchInput: FC<SearchInputProps> = ({ onChange, delay = 300, ...props }) => {
+const SearchInput: FC<SearchInputProps> = ({ handleChange, delay = 300, ...props }) => {
     const [value, setValue] = useState<string>('');
 
-    const debouncedOnChange = debounce(onChange, delay);
+    const debouncedOnChange = debounce(handleChange, delay);
 
     useEffect(() => {
         debouncedOnChange(value);
