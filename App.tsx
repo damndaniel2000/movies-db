@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { SafeAreaView, FlatList, View, Text, Image, StyleSheet, SectionList, Dimensions } from 'react-native';
+import { SafeAreaView, FlatList, View, Text, Image, StyleSheet, SectionList, Modal, TouchableOpacity } from 'react-native';
 import Axios from 'axios';
 import { MovieSectionComponent, MovieCard, MovieSkeletonLoader } from './components/MovieSection';
 import { Genre, Movie, MovieSection } from './utils/types';
-import { MOVIES_API, GENRES_API, SEARCH_API } from './utils/constants';
+import { MOVIES_API, GENRES_API, SEARCH_API, MOVIE_CARD_HEIGHT } from './utils/constants';
 import GenreButton from './components/GenreButton';
 import Loader from './components/Loader';
 import SearchInput from './components/Searchbar';
+import MovieDetailsModal from './components/MovieDetailsModal';
 
 const LOGO = require("./assets/fancode-fclogo.png")
 const DEFAULT_YEAR = 2012
@@ -36,6 +37,16 @@ export default function App() {
   const [searchHasMore, setSearchHasMore] = useState(true);
 
   const moviesListRef = useRef(null) as any
+
+  const [selectedMovie, setSelectedMovie] = useState<string | null>();
+
+  const handleOpenModal = (id?: string) => {
+    setSelectedMovie(id);
+  };
+
+  const handleCloseModal = () => {
+    setSelectedMovie(null);
+  };
 
   const scrollToDefaultPosition = () => {
     moviesListRef.current?.scrollToLocation({
@@ -103,12 +114,7 @@ export default function App() {
     fetchMovies(yearToFetch, (newMovies) => {
       setMovies([newMovies]);
       setIsMoviesLoading(false)
-      moviesListRef.current?.scrollToLocation({
-        animated: false,
-        sectionIndex: 0,
-        itemIndex: 0,
-        viewOffset: -5,
-      });
+      scrollToDefaultPosition()
     });
   };
 
@@ -128,6 +134,13 @@ export default function App() {
       if (prev) {
         setMovies(prev => [newMovies].concat(prev));
         setCurrentPrevYear(yearToFetch)
+        moviesListRef.current?.scrollToLocation({
+          sectionIndex: 0,
+          itemIndex: 0,
+          //to maintain scroll content position
+          viewOffset: -(MOVIE_CARD_HEIGHT) * (newMovies.data[0].movies.length / 2),
+          animated: false
+        })
       }
       else {
         setMovies(prev => [...prev, newMovies]);
@@ -194,11 +207,10 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (searchString.length < 2)
+    if (searchString.length <= 2)
       loadMovieData()
     else onSearchMovies(searchString)
   }, [selectedGenres]);
-
 
   useEffect(() => {
     Axios.get(GENRES_API)
@@ -238,11 +250,13 @@ export default function App() {
           isMoviesLoading ?
             <MovieSkeletonLoader />
             :
-            searchString.length < 2 ?
+            searchString.length <= 2 ?
               <SectionList
                 ref={moviesListRef}
                 sections={movies}
-                renderItem={MovieSectionComponent}
+                renderItem={({ section }) => (
+                  <MovieSectionComponent section={section} onPress={handleOpenModal} />
+                )}
                 renderSectionHeader={({ section }: { section: MovieSection }) => (
                   <View style={styles.header}>
                     <Text style={styles.headerText}>{section.title}</Text>
@@ -250,7 +264,7 @@ export default function App() {
                 )}
                 keyExtractor={(item, index) => item.key.toString() + index.toString()}
                 onEndReached={e => loadMoreMovieData(false, true)}
-                onEndReachedThreshold={1}
+                onEndReachedThreshold={10}
                 onScroll={(e) => {
                   if (e.nativeEvent.contentOffset.y === 0) {
                     loadMoreMovieData(true)
@@ -263,14 +277,17 @@ export default function App() {
               <FlatList
                 data={searchMovies}
                 keyExtractor={(item, index) => item.id.toString() + index.toString()}
-                renderItem={MovieCard}
+                renderItem={({ item }) => <MovieCard item={item} onPress={handleOpenModal} />}
                 numColumns={2}
                 onEndReached={onSearchMoreMovies}
                 onEndReachedThreshold={1}
                 ListFooterComponent={() => <Loader isLoading={isNextFetching && movies.length > 0} />}
               />
+
         }
       </SafeAreaView>
+      {/* Render MovieDetailsModal if a movie is selected */}
+      {selectedMovie && <MovieDetailsModal id={selectedMovie} onClose={handleCloseModal} />}
     </SafeAreaView>
   );
 }

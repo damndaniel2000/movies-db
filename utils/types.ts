@@ -3,7 +3,7 @@ export type Movie = {
   id: string,
   poster_path: string,
   vote_average: number,
-  genre_ids: number[]
+  genre_ids: number[],
 }
 
 export type MovieSection = {
@@ -12,6 +12,18 @@ export type MovieSection = {
     { key: number, movies: Movie[] }
   ],
 }
+
+export type MovieDetails = {
+    title: string;
+    poster_path: string;
+    credits: {
+        cast: { name: string }[];
+        crew: { name: string; job: string }[];
+    };
+    genres: { name: string }[];
+    overview: string;
+};
+
 
 export type Genre = {
   name: string,
