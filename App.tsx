@@ -270,6 +270,11 @@ export default function App() {
                     loadMoreMovieData(true)
                   }
                 }}
+                ListEmptyComponent={() =>
+                  <View style={styles.emptyStateContainer}>
+                    <Text style={styles.emptyStateText}>No movies found.</Text>
+                  </View>
+                }
                 ListHeaderComponent={() => <Loader isLoading={isPrevFetching && movies.length > 0} />}
                 ListFooterComponent={() => <Loader isLoading={isNextFetching && movies.length > 0} />}
               />
@@ -282,6 +287,11 @@ export default function App() {
                 onEndReached={onSearchMoreMovies}
                 onEndReachedThreshold={1}
                 ListFooterComponent={() => <Loader isLoading={isNextFetching && movies.length > 0} />}
+                ListEmptyComponent={() =>
+                  <View style={styles.emptyStateContainer}>
+                    <Text style={styles.emptyStateText}>No movies found.</Text>
+                  </View>
+                }
               />
 
         }
@@ -312,5 +322,16 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: "#fff",
     fontWeight: "bold"
+  },
+  emptyStateContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 50, // Adjust as needed
+  },
+  emptyStateText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
